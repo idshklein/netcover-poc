@@ -12,13 +12,16 @@ const root = path.resolve(new URL('..', import.meta.url).pathname.replace(/^\/([
 const outDir = path.join(root, 'scripts', 'shots');
 fs.mkdirSync(outDir, { recursive: true });
 
-const server = spawn('npx', ['vite', 'preview', '--port', '4173', '--strictPort'], { cwd: root, shell: true, stdio: 'pipe' });
-await new Promise((res, rej) => {
-  server.stdout.on('data', (d) => { if (String(d).includes('4173')) res(); });
-  server.stderr.on('data', (d) => { console.error(String(d)); });
-  server.on('exit', (c) => rej(new Error(`vite preview exited ${c}`)));
-});
-const cleanup = () => { try { spawn('taskkill', ['/pid', String(server.pid), '/T', '/F'], { shell: true }); } catch { /* ignore */ } };
+const baseUrl = process.env.E2E_URL;
+const server = baseUrl ? null : spawn('npx', ['vite', 'preview', '--port', '4173', '--strictPort'], { cwd: root, shell: true, stdio: 'pipe' });
+if (server) {
+  await new Promise((res, rej) => {
+    server.stdout.on('data', (d) => { if (String(d).includes('4173')) res(); });
+    server.stderr.on('data', (d) => { console.error(String(d)); });
+    server.on('exit', (c) => rej(new Error(`vite preview exited ${c}`)));
+  });
+}
+const cleanup = () => { if (server) { try { spawn('taskkill', ['/pid', String(server.pid), '/T', '/F'], { shell: true }); } catch { /* ignore */ } } };
 
 const browser = await chromium.launch({ channel: 'msedge', headless: true });
 const page = await browser.newPage({ viewport: { width: 1500, height: 950 } });
@@ -26,7 +29,7 @@ const errors = [];
 page.on('console', (m) => { if (m.type() === 'error' || m.type() === 'warning') errors.push(`${m.type()}: ${m.text()}`); });
 page.on('pageerror', (e) => errors.push(`pageerror: ${e.message}`));
 
-const url = `http://localhost:4173/?place=${encodeURIComponent(place)}&type=${type}&r=${r}&algo=${algo}&auto=1`;
+const url = baseUrl ? `${baseUrl}?place=${encodeURIComponent(place)}&type=${type}&r=${r}&algo=${algo}&auto=1` : `http://localhost:4173/?place=${encodeURIComponent(place)}&type=${type}&r=${r}&algo=${algo}&auto=1`;
 console.log('open', url);
 await page.goto(url);
 await page.waitForFunction(() => window.__netcover?.graph, null, { timeout: 600000 });
