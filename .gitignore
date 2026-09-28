@@ -5,6 +5,8 @@ web/prof/
 web/scripts/.cache_*.json
 web/scripts/shots/
 web/scripts/e2e.log
+web/scripts/e2e_prod.log
+web/.netlify/
 lib/python/__pycache__/
 lib/python/*.png
 lib/r/frames/
