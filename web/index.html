@@ -1,0 +1,157 @@
+<!doctype html>
+<html lang="he" dir="rtl">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <title>כיסוי רשתי – איזוכרון הפוך | POC</title>
+    <link rel="stylesheet" href="./src/style.css" />
+  </head>
+  <body>
+    <aside id="panel">
+      <header>
+        <h1>כיסוי רשתי – איזוכרון הפוך</h1>
+        <p class="sub">מציאת קבוצת מוקדים מינימלית כך שכל צומת ברשת נמצא במרחק ≤ r מהמוקד הקרוב אליו</p>
+      </header>
+
+      <details open>
+        <summary>1. רשת (OSM דרך Overpass)</summary>
+        <label>מקור השטח
+          <select id="areaMode">
+            <option value="place">מקום לפי שם (Nominatim → פוליגון)</option>
+            <option value="view">תיבת המפה הנוכחית</option>
+          </select>
+        </label>
+        <label>שם מקום <input id="place" value="תל אביב-יפו" /></label>
+        <label>סוג רשת (כללי osmnx)
+          <select id="netType">
+            <option value="walk" selected>walk</option>
+            <option value="drive">drive</option>
+            <option value="drive_service">drive_service</option>
+            <option value="bike">bike</option>
+            <option value="all">all</option>
+            <option value="all_public">all_public</option>
+            <option value="all_private">all_private</option>
+          </select>
+        </label>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="simplify" checked /> פישוט טופולוגי</label>
+          <label class="chk"><input type="checkbox" id="largest" checked /> רכיב קשיר גדול</label>
+        </div>
+        <div class="row">
+          <label>איחוד צמתים (מ', 0=כבוי) <input id="consolidate" type="number" value="0" min="0" step="5" /></label>
+          <label>אורך מקטע מקס' (מ', 0=כבוי) <input id="segment" type="number" value="150" min="0" step="25" /></label>
+        </div>
+        <div class="row">
+          <button id="download" class="primary">הורד ובנה רשת</button>
+          <button id="clearCache" title="נקה מטמון Overpass מקומי">נקה מטמון</button>
+        </div>
+        <div id="netStatus" class="status"></div>
+        <div id="netWarn" class="warn hidden"></div>
+        <table id="netStats" class="stats hidden"></table>
+      </details>
+
+      <details open>
+        <summary>2. אלגוריתם</summary>
+        <label>שיטה
+          <select id="algorithm">
+            <option value="pullseed" selected>משיכה-והוספה (האלגוריתם המוצע – k-center אינקרמנטלי)</option>
+            <option value="gonzalez">Gonzalez – farthest-first traversal</option>
+            <option value="lscp">Greedy Set Cover – LSCP (Toregas 1971)</option>
+            <option value="fixedk">k קבוע – Lloyd רשתי (k-medoids / k-center)</option>
+          </select>
+        </label>
+        <div class="row">
+          <label>רדיוס כיסוי r (מ') <input id="radius" type="number" value="500" min="50" step="50" /></label>
+          <label>מטרת המשיכה
+            <select id="objective">
+              <option value="minimax" selected>minimax – 1-center (מרחק מקס' מזערי)</option>
+              <option value="minisum">minisum – 1-median (סכום מרחקים מזערי)</option>
+            </select>
+          </label>
+        </div>
+        <div class="row">
+          <label>אתחול
+            <select id="init">
+              <option value="diameter" selected>קצות הקוטר (כמו ביישום הייחוס)</option>
+              <option value="single">מרכז הגרף המקורב (מוקד אחד)</option>
+              <option value="random">k מוקדים אקראיים</option>
+              <option value="manual">ידני – לחיצה על המפה</option>
+            </select>
+          </label>
+          <label>k <input id="k" type="number" value="5" min="1" /></label>
+        </div>
+        <div id="manualHint" class="hint hidden">לחצו על המפה כדי להוסיף מוקדי אתחול (<span id="manualCount">0</span>). <button id="manualClear" class="link">נקה</button></div>
+        <div class="row">
+          <label class="chk"><input type="checkbox" id="postPull" /> שיפור-משיכה בסיום</label>
+          <label class="chk"><input type="checkbox" id="postPrune" /> גיזום מוקדים מיותרים</label>
+        </div>
+        <details class="adv">
+          <summary>מתקדם</summary>
+          <div class="row">
+            <label>גודל אשכול לחישוב מדויק <input id="exactLimit" type="number" value="120" min="0" /></label>
+            <label>מועמדים ל-LSCP <input id="candidateCap" type="number" value="1500" min="50" /></label>
+          </div>
+          <div class="row">
+            <label>תקציב זמן (שניות) <input id="budget" type="number" value="120" min="5" /></label>
+            <label>seed <input id="seed" type="number" value="42" /></label>
+          </div>
+        </details>
+        <div class="row">
+          <button id="run" class="primary" disabled>הרץ</button>
+          <button id="cancel" disabled>עצור</button>
+        </div>
+        <div id="runWarn" class="warn hidden"></div>
+        <div id="runStatus" class="status"></div>
+      </details>
+
+      <details>
+        <summary>3. תצוגה וייצוא</summary>
+        <label>צביעת הרשת
+          <select id="colorMode">
+            <option value="cluster" selected>לפי אשכול (המוקד הקרוב)</option>
+            <option value="distance">לפי מרחק מהמוקד (ירוק ≤ r, אדום > r)</option>
+          </select>
+        </label>
+        <label class="chk"><input type="checkbox" id="showMoves" checked /> הצג חיצי תזוזה של מוקדים</label>
+        <div class="row">
+          <button id="exportGeo">ייצוא GeoJSON של הצעד הנוכחי</button>
+          <button id="exportSteps">ייצוא כל הצעדים (JSON)</button>
+        </div>
+      </details>
+
+      <details>
+        <summary>על השיטות</summary>
+        <div class="doc">
+          <p><b>הבעיה.</b> נתונה רשת מרחבית G=(V,E) עם אורכי קשתות במטרים ורדיוס r. מחפשים קבוצת מוקדים S⊆V קטנה ככל האפשר כך שלכל צומת v מתקיים d(v,S) ≤ r – "איזוכרון הפוך": קובעים את המרחק המקסימלי ומחפשים את המוקדים. זו בעיית <i>Location Set Covering</i> (LSCP), והדואל שלה – <i>k-center</i> (מזעור המרחק המקסימלי בהינתן k) – NP-קשה.</p>
+          <p><b>משיכה-והוספה (המוצע).</b> מאתחלים במוקדים מעטים; בכל צעד (א) כל צומת משויך למוקד הקרוב ביותר (Dijkstra רב-מקורי → תאי וורונוי רשתיים), (ב) כל מוקד "נמשך" אל ה-1-center (או ה-1-median) של האשכול שלו. כשאף מוקד אינו זז – התכנסות מקומית ("היתקעות") – מוסיפים מוקד חדש בצומת הרחוק ביותר מכל המוקדים, וממשיכים עד ש-max d(v,S) ≤ r. זהו k-means/k-medoids רשתי אינקרמנטלי, בדומה ל-<i>Global k-means</i> (Likas 2003) ול-<i>k-means++</i> אך עם קריטריון עצירה גאומטרי במקום k נתון.</p>
+          <p><b>Gonzalez (1985).</b> Farthest-first traversal: מתחילים במוקד אחד ומוסיפים בכל פעם את הצומת הרחוק ביותר. קירוב-2 ל-k-center; מהיר מאוד, ללא שלב משיכה.</p>
+          <p><b>Greedy set cover – LSCP (Toregas et al. 1971; Church & ReVelle 1974 – MCLP).</b> לכל מועמד מחשבים את קבוצת הצמתים שבמרחק ≤ r (Dijkstra חסום). בוחרים חמדנית את המועמד שמכסה הכי הרבה צמתים שטרם כוסו. קירוב ln(n). כאן מוגבל למדגם מועמדים כדי לחסוך זמן.</p>
+          <p><b>k קבוע – Lloyd רשתי.</b> אותו שלב משיכה, ללא הוספת מוקדים: מציג מה קורה כשמספר המוקדים נתון (k-medoids / p-center heuristic). מסתיים בהתכנסות ומדווח אם r הושג.</p>
+          <p><b>שלבי-סיום.</b> "שיפור-משיכה" מפעיל את שלב המשיכה על תוצאת כל שיטה (ב-minimax המרחק המקסימלי אינו עולה); "גיזום" מסיר מוקדים מיותרים בסדר עולה של גודל האשכול (רדוקציה סטנדרטית ב-LSCP).</p>
+          <p><b>יישום.</b> הורדת הרשת עם מסנני osmnx ל-Overpass, פישוט טופולוגי (מיזוג צמתי-ביניים כמו <code>osmnx.simplify_graph</code>), איחוד צמתים (<code>consolidate_intersections</code>), הרכיב הקשיר הגדול, וחלוקת קשתות למקטעים (כמו <code>st_network_blend</code> ב-sfnetworks ביישום הייחוס). החישוב רץ ב-Web Worker; 1-center לאשכולות גדולים מחושב במדויק באמצעות חסמים תחתונים עצלים (Dijkstra חסום) במקום מטריצת מרחקים מלאה.</p>
+        </div>
+      </details>
+    </aside>
+
+    <main>
+      <div id="map"></div>
+      <div id="legend" class="hidden"></div>
+      <div id="timeline" class="hidden">
+        <div class="controls">
+          <button id="first" title="ראשון">⏮</button>
+          <button id="prev" title="הקודם">◀</button>
+          <button id="play" title="נגן">▶</button>
+          <button id="next" title="הבא">▶|</button>
+          <button id="last" title="אחרון">⏭</button>
+          <label>מהירות <input id="speed" type="range" min="1" max="20" value="6" /></label>
+          <span id="stepLabel"></span>
+        </div>
+        <input id="slider" type="range" min="0" max="0" value="0" />
+        <div id="stepNote"></div>
+        <div id="stepStats"></div>
+        <svg id="chart" viewBox="0 0 600 90" preserveAspectRatio="none"></svg>
+      </div>
+    </main>
+    <script type="module" src="./src/main.ts"></script>
+  </body>
+</html>

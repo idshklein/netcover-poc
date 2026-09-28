@@ -1,0 +1,14 @@
+_ref/
+web/node_modules/
+web/dist/
+web/prof/
+web/scripts/.cache_*.json
+web/scripts/shots/
+web/scripts/e2e.log
+lib/python/__pycache__/
+lib/python/*.png
+lib/r/frames/
+lib/r/*.png
+lib/r/*.gif
+lib/r/*.gpkg
+lib/qgis/__pycache__/
