@@ -202,6 +202,7 @@ $('run').onclick = () => {
     postPrune: chk('postPrune'),
     timeBudgetMs: num('budget') * 1000,
     seed: num('seed'),
+    maxSteps: num('maxSteps'),
   };
   if (params.init === 'manual' && manualNodes.length === 0) { setStatus('runStatus', 'בחרו לפחות מוקד אחד על המפה'); return; }
   setBusy(true);
