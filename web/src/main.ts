@@ -378,8 +378,10 @@ $('exportGeo').onclick = () => {
 $('exportSteps').onclick = () => {
   if (!graph || !steps.length) return;
   const g = graph;
-  const out = steps.map((s, i) => ({ step: i, kind: s.kind, note: s.note, maxDist: s.maxDist, meanDist: s.meanDist, covered: s.covered, elapsedMs: s.elapsedMs,
-    centers: Array.from(s.centers, (v) => ({ node: v, lon: g.lon[v], lat: g.lat[v], osm_id: g.osmId[v] || null })), moved: s.moved, added: s.added, removed: s.removed }));
+  const out = steps.map((s, i) => ({
+    step: i, kind: s.kind, note: s.note, maxDist: s.maxDist, meanDist: s.meanDist, covered: s.covered, elapsedMs: s.elapsedMs,
+    centers: Array.from(s.centers, (v) => ({ node: v, lon: g.lon[v], lat: g.lat[v], osm_id: g.osmId[v] || null })), moved: s.moved, added: s.added, removed: s.removed
+  }));
   saveFile('netcover_steps.json', JSON.stringify(out));
 };
 function saveFile(name: string, text: string) {
