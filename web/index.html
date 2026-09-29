@@ -19,9 +19,24 @@
           <select id="areaMode">
             <option value="place">מקום לפי שם (Nominatim → פוליגון)</option>
             <option value="view">תיבת המפה הנוכחית</option>
+            <option value="city">עיר מרשימה (קובץ שמור מראש, ללא המתנה ל-Overpass)</option>
           </select>
         </label>
         <label>שם מקום <input id="place" value="תל אביב-יפו" /></label>
+        <label class="hidden">עיר שמורה
+          <select id="citySelect">
+            <option value="jerusalem">ירושלים</option>
+            <option value="tel-aviv-yafo">תל אביב-יפו</option>
+            <option value="haifa">חיפה</option>
+            <option value="beer-sheva">באר שבע</option>
+            <option value="ashdod">אשדוד</option>
+            <option value="ashkelon">אשקלון</option>
+            <option value="rishon-lezion">ראשון לציון</option>
+            <option value="petah-tikva">פתח תקווה</option>
+            <option value="raanana">רעננה</option>
+          </select>
+        </label>
+        <div id="cityHint" class="hint hidden">רשת walk בלבד; סוג הרשת נעול כשמצב זה נבחר.</div>
         <label>סוג רשת (כללי osmnx)
           <select id="netType">
             <option value="walk" selected>walk</option>

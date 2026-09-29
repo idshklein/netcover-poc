@@ -2,6 +2,7 @@ import { NetMap, type ColorMode } from './map';
 import type { Graph } from './graph/graph';
 import type { BuildOptions, BuildStats } from './graph/osm';
 import { geocodePlace, buildQuery, fetchOverpass, bboxAreaKm2, type NetworkType, type Area, type OverpassJson } from './graph/overpass';
+import { loadCityManifest, loadCityOsm } from './graph/citycache';
 import { DEFAULT_PARAMS, type Params, type Step } from './algo/algorithms';
 import type { WorkerIn, WorkerOut } from './worker';
 import { cacheGet, cacheSet, cacheClear } from './cache';
@@ -49,7 +50,19 @@ function handle(m: WorkerOut) {
 // ---------------- network download ----------------
 $('download').onclick = () => download().catch((e) => { setStatus('netStatus', `שגיאה: ${e.message}`); setBusy(false); });
 $('clearCache').onclick = async () => { await cacheClear(); setStatus('netStatus', 'המטמון נוקה'); };
-$('areaMode').onchange = () => { $('place').parentElement!.classList.toggle('hidden', val('areaMode') !== 'place'); };
+$('areaMode').onchange = () => {
+  const mode = val('areaMode');
+  $('place').parentElement!.classList.toggle('hidden', mode !== 'place');
+  $('citySelect').parentElement!.classList.toggle('hidden', mode !== 'city');
+  $('cityHint').classList.toggle('hidden', mode !== 'city');
+  const netType = $('netType') as HTMLSelectElement;
+  if (mode === 'city') { netType.value = 'walk'; netType.disabled = true; } else { netType.disabled = false; }
+};
+loadCityManifest().then((m) => {
+  if (!m.length) return; // manifest missing (e.g. dev before running scripts/build-city-cache.ts)
+  const known = new Set(m.map((c) => c.slug));
+  for (const opt of Array.from(($('citySelect') as HTMLSelectElement).options)) opt.disabled = !known.has(opt.value);
+});
 
 async function download() {
   setBusy(true);
@@ -58,7 +71,20 @@ async function download() {
   const type = val('netType') as NetworkType;
   let area: Area;
   let bbox: [number, number, number, number];
-  if (val('areaMode') === 'place') {
+  let osm: OverpassJson | undefined;
+  if (val('areaMode') === 'city') {
+    const slug = val('citySelect');
+    setStatus('netStatus', 'טוען קובץ שמור…');
+    const manifest = await loadCityManifest();
+    const entry = manifest.find((c) => c.slug === slug);
+    if (!entry) throw new Error(`אין קובץ שמור עבור "${slug}" — הריצו scripts/build-city-cache.ts`);
+    bbox = entry.bbox;
+    area = { kind: 'bbox', west: bbox[0], south: bbox[1], east: bbox[2], north: bbox[3] };
+    netMap.setArea(null);
+    netMap.map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 30, duration: 500 });
+    osm = await loadCityOsm(slug);
+    setStatus('netStatus', `נטען מקובץ שמור: ${osm.elements.length.toLocaleString()} אלמנטים (${entry.name})`);
+  } else if (val('areaMode') === 'place') {
     setStatus('netStatus', 'מחפש את המקום ב-Nominatim…');
     const geo = await geocodePlace(val('place'));
     area = geo.area; bbox = geo.bbox;
@@ -74,14 +100,16 @@ async function download() {
   }
   const km2 = bboxAreaKm2(bbox);
   if (km2 > 150) showWarn('netWarn', `שטח התיבה ~${Math.round(km2)} קמ"ר – הורדה ועיבוד עלולים להימשך זמן רב (ורשת ה-walk גדולה במיוחד). מומלץ שטח < 100 קמ"ר, או drive/bike.`);
-  const query = buildQuery(area, type);
-  let osm = await cacheGet<OverpassJson>(query);
-  if (osm) setStatus('netStatus', 'נטען מהמטמון המקומי');
-  else {
-    const t = performance.now();
-    osm = await fetchOverpass(query, (s) => setStatus('netStatus', s));
-    setStatus('netStatus', `הורדו ${osm.elements.length.toLocaleString()} אלמנטים ב-${((performance.now() - t) / 1000).toFixed(1)} ש'`);
-    await cacheSet(query, osm);
+  if (!osm) {
+    const query = buildQuery(area, type);
+    osm = await cacheGet<OverpassJson>(query);
+    if (osm) setStatus('netStatus', 'נטען מהמטמון המקומי');
+    else {
+      const t = performance.now();
+      osm = await fetchOverpass(query, (s) => setStatus('netStatus', s));
+      setStatus('netStatus', `הורדו ${osm.elements.length.toLocaleString()} אלמנטים ב-${((performance.now() - t) / 1000).toFixed(1)} ש'`);
+      await cacheSet(query, osm);
+    }
   }
   const opts: BuildOptions = {
     simplify: chk('simplify'),
