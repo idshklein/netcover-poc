@@ -1,10 +1,11 @@
-import { buildGraph, type BuildOptions } from './graph/osm';
+import { buildGraph, buildGraphFromWork, type BuildOptions, type Work } from './graph/osm';
 import type { Graph } from './graph/graph';
 import type { OverpassJson } from './graph/overpass';
 import { run, assignment, type Params, type Step } from './algo/algorithms';
 
 export type WorkerIn =
   | { type: 'build'; osm: OverpassJson; opts: BuildOptions }
+  | { type: 'buildWork'; work: Work; opts: BuildOptions }
   | { type: 'graph'; graph: Graph }
   | { type: 'run'; params: Params }
   | { type: 'assign'; centers: Int32Array; id: number };
@@ -26,6 +27,12 @@ self.onmessage = (ev: MessageEvent<WorkerIn>) => {
     switch (msg.type) {
       case 'build': {
         const { graph: g, stats } = buildGraph(msg.osm, msg.opts, (s) => post({ type: 'log', msg: s }));
+        graph = g;
+        post({ type: 'built', graph: g, stats });
+        break;
+      }
+      case 'buildWork': {
+        const { graph: g, stats } = buildGraphFromWork(msg.work, msg.opts, (s) => post({ type: 'log', msg: s }));
         graph = g;
         post({ type: 'built', graph: g, stats });
         break;

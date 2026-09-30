@@ -16,16 +16,17 @@
     </header>
 
     <details open>
-      <summary>1. רשת (OSM דרך Overpass)</summary>
+      <summary>1. רשת</summary>
       <label>מקור השטח
         <select id="areaMode">
-          <option value="place">מקום לפי שם (Nominatim → פוליגון)</option>
-          <option value="view">תיבת המפה הנוכחית</option>
-          <option value="city">עיר מרשימה (קובץ שמור מראש, ללא המתנה ל-Overpass)</option>
+          <option value="city" selected>עיר מרשימה (קובץ שמור מראש – הכי אמין)</option>
+          <option value="place">מקום לפי שם (Nominatim → Overpass)</option>
+          <option value="view">תיבת המפה הנוכחית (Overpass)</option>
+          <option value="overture">תיבת המפה הנוכחית (Overture Maps – נסיוני, איטי)</option>
         </select>
       </label>
-      <label>שם מקום <input id="place" value="תל אביב-יפו" /></label>
-      <label class="hidden">עיר שמורה
+      <label class="hidden">שם מקום <input id="place" value="תל אביב-יפו" /></label>
+      <label>עיר שמורה
         <select id="citySelect">
           <option value="jerusalem">ירושלים</option>
           <option value="tel-aviv-yafo">תל אביב-יפו</option>
@@ -38,7 +39,8 @@
           <option value="raanana">רעננה</option>
         </select>
       </label>
-      <div id="cityHint" class="hint hidden">רשת walk בלבד; סוג הרשת נעול כשמצב זה נבחר.</div>
+      <div id="cityHint" class="hint">רשת walk בלבד, נטענת מראש – עובדת מיד, ללא תלות ברשת. סוג הרשת נעול כשמצב זה נבחר.</div>
+      <div id="overtureHint" class="warn hidden">ניסיוני: שאילתה חיה על S3/DuckDB-WASM ועלולה להימשך דקות עד מספר דקות אפילו עבור שטח קטן; דורש זום ≥ 10.</div>
       <label>סוג רשת (כללי osmnx)
         <select id="netType">
           <option value="walk" selected>walk</option>
@@ -60,7 +62,7 @@
       </div>
       <div class="row">
         <button id="download" class="primary">הורד ובנה רשת</button>
-        <button id="clearCache" title="נקה מטמון Overpass מקומי">נקה מטמון</button>
+        <button id="clearCache" title="נקה מטמון מקומי (IndexedDB)">נקה מטמון</button>
       </div>
       <div id="netStatus" class="status"></div>
       <div id="netWarn" class="warn hidden"></div>

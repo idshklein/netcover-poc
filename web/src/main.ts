@@ -1,7 +1,8 @@
 import { NetMap, type ColorMode } from './map';
 import type { Graph } from './graph/graph';
-import type { BuildOptions, BuildStats } from './graph/osm';
+import type { BuildOptions, BuildStats, Work } from './graph/osm';
 import { geocodePlace, buildQuery, fetchOverpass, bboxAreaKm2, type NetworkType, type Area, type OverpassJson } from './graph/overpass';
+import { fetchOverture, overtureRowsToWork } from './graph/overture';
 import { loadCityManifest, loadCityOsm } from './graph/citycache';
 import { DEFAULT_PARAMS, type Params, type Step } from './algo/algorithms';
 import type { WorkerIn, WorkerOut } from './worker';
@@ -48,6 +49,12 @@ function handle(m: WorkerOut) {
 }
 
 // ---------------- network download ----------------
+const MIN_DOWNLOAD_ZOOM = 10;
+/** Zoom the map would use to fit `bbox` — computed synchronously so it's valid even mid fitBounds animation. */
+function effectiveZoom(bbox: [number, number, number, number]): number {
+  const cam = netMap.map.cameraForBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 30 });
+  return cam?.zoom ?? netMap.map.getZoom();
+}
 $('download').onclick = () => download().catch((e) => { setStatus('netStatus', `שגיאה: ${e.message}`); setBusy(false); });
 $('clearCache').onclick = async () => { await cacheClear(); setStatus('netStatus', 'המטמון נוקה'); };
 $('areaMode').onchange = () => {
@@ -55,6 +62,7 @@ $('areaMode').onchange = () => {
   $('place').parentElement!.classList.toggle('hidden', mode !== 'place');
   $('citySelect').parentElement!.classList.toggle('hidden', mode !== 'city');
   $('cityHint').classList.toggle('hidden', mode !== 'city');
+  $('overtureHint').classList.toggle('hidden', mode !== 'overture');
   const netType = $('netType') as HTMLSelectElement;
   if (mode === 'city') { netType.value = 'walk'; netType.disabled = true; } else { netType.disabled = false; }
 };
@@ -69,10 +77,12 @@ async function download() {
   showWarn('netWarn', null);
   $('netStats').classList.add('hidden');
   const type = val('netType') as NetworkType;
+  const mode = val('areaMode');
   let area: Area;
   let bbox: [number, number, number, number];
   let osm: OverpassJson | undefined;
-  if (val('areaMode') === 'city') {
+  let work: Work | undefined;
+  if (mode === 'city') {
     const slug = val('citySelect');
     setStatus('netStatus', 'טוען קובץ שמור…');
     const manifest = await loadCityManifest();
@@ -84,7 +94,7 @@ async function download() {
     netMap.map.fitBounds([[bbox[0], bbox[1]], [bbox[2], bbox[3]]], { padding: 30, duration: 500 });
     osm = await loadCityOsm(slug);
     setStatus('netStatus', `נטען מקובץ שמור: ${osm.elements.length.toLocaleString()} אלמנטים (${entry.name})`);
-  } else if (val('areaMode') === 'place') {
+  } else if (mode === 'place') {
     setStatus('netStatus', 'מחפש את המקום ב-Nominatim…');
     const geo = await geocodePlace(val('place'));
     area = geo.area; bbox = geo.bbox;
@@ -100,7 +110,7 @@ async function download() {
   }
   const km2 = bboxAreaKm2(bbox);
   if (km2 > 150) showWarn('netWarn', `שטח התיבה ~${Math.round(km2)} קמ"ר – הורדה ועיבוד עלולים להימשך זמן רב (ורשת ה-walk גדולה במיוחד). מומלץ שטח < 100 קמ"ר, או drive/bike.`);
-  if (!osm) {
+  if (mode === 'place' || mode === 'view') {
     const query = buildQuery(area, type);
     osm = await cacheGet<OverpassJson>(query);
     if (osm) setStatus('netStatus', 'נטען מהמטמון המקומי');
@@ -110,6 +120,22 @@ async function download() {
       setStatus('netStatus', `הורדו ${osm.elements.length.toLocaleString()} אלמנטים ב-${((performance.now() - t) / 1000).toFixed(1)} ש'`);
       await cacheSet(query, osm);
     }
+  } else if (mode === 'overture') {
+    const ez = effectiveZoom(bbox);
+    if (ez < MIN_DOWNLOAD_ZOOM) {
+      setBusy(false);
+      throw new Error(`התקרבו לזום ${MIN_DOWNLOAD_ZOOM} ומעלה לפני הורדת הרשת (זום נוכחי ~${ez.toFixed(1)}) — שאילתת Overture על כל השטח הנראה גדולה מדי`);
+    }
+    const cacheKey = `overture:${type}:${bbox.map((x) => x.toFixed(5)).join(',')}`;
+    work = await cacheGet<Work>(cacheKey);
+    if (work) setStatus('netStatus', 'נטען מהמטמון המקומי');
+    else {
+      const t = performance.now();
+      const rows = await fetchOverture(bbox, type, (s) => setStatus('netStatus', s));
+      work = overtureRowsToWork(rows);
+      setStatus('netStatus', `הורדו ${rows.length.toLocaleString()} מקטעי Overture ב-${((performance.now() - t) / 1000).toFixed(1)} ש'`);
+      await cacheSet(cacheKey, work);
+    }
   }
   const opts: BuildOptions = {
     simplify: chk('simplify'),
@@ -117,7 +143,8 @@ async function download() {
     segmentLength: num('segment'),
     largestComponent: chk('largest'),
   };
-  send({ type: 'build', osm, opts });
+  if (osm) send({ type: 'build', osm, opts });
+  else send({ type: 'buildWork', work: work!, opts });
 }
 
 function onBuilt(g: Graph, s: BuildStats) {
@@ -406,10 +433,12 @@ function fmt(x: number) { return Math.round(x).toLocaleString('en-US'); }
 (function applyUrlParams() {
   const q = new URLSearchParams(location.search);
   const setIf = (id: string, key: string) => { const v = q.get(key); if (v !== null) ($(id) as HTMLInputElement).value = v; };
+  if (q.get('place') !== null) ($('areaMode') as HTMLSelectElement).value = 'place';
   setIf('place', 'place'); setIf('netType', 'type'); setIf('radius', 'r'); setIf('algorithm', 'algo'); setIf('segment', 'segment');
   setIf('objective', 'objective'); setIf('init', 'init'); setIf('k', 'k'); setIf('consolidate', 'consolidate');
   if (q.get('prune') === '1') ($('postPrune') as HTMLInputElement).checked = true;
   if (q.get('pull') === '1') ($('postPull') as HTMLInputElement).checked = true;
+  $('areaMode').dispatchEvent(new Event('change'));
   syncAlgoUI();
   if (q.get('auto') === '1') {
     netMap.whenReady().then(async () => {

@@ -63,3 +63,27 @@ export function splitPolyline(coords: ArrayLike<number>, parts: number): number[
   while (out.length < parts) out.push([cur[cur.length - 2], cur[cur.length - 1], cur[cur.length - 2], cur[cur.length - 1]]);
   return out;
 }
+
+/** Split a polyline at given cut distances (meters, sorted ascending, strictly between 0 and the total length). */
+export function sliceAtDistances(coords: ArrayLike<number>, cuts: number[]): number[][] {
+  const out: number[][] = [];
+  let cur: number[] = [coords[0], coords[1]];
+  let acc = 0;
+  let cutIdx = 0;
+  for (let i = 2; i < coords.length; i += 2) {
+    const ax = coords[i - 2], ay = coords[i - 1], bx = coords[i], by = coords[i + 1];
+    const seg = haversine(ax, ay, bx, by);
+    while (cutIdx < cuts.length && acc + seg >= cuts[cutIdx] && seg > 0) {
+      const t = (cuts[cutIdx] - acc) / seg;
+      const px = ax + (bx - ax) * t, py = ay + (by - ay) * t;
+      cur.push(px, py);
+      out.push(cur);
+      cur = [px, py];
+      cutIdx++;
+    }
+    cur.push(bx, by);
+    acc += seg;
+  }
+  out.push(cur);
+  return out;
+}

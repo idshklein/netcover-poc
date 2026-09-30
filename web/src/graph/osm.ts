@@ -22,7 +22,7 @@ export interface BuildStats {
   totalKm: number;
 }
 
-interface Work {
+export interface Work {
   lon: number[];
   lat: number[];
   osmId: number[];
@@ -31,7 +31,12 @@ interface Work {
 
 export function buildGraph(osm: OverpassJson, opts: BuildOptions, log: (s: string) => void = () => {}): { graph: Graph; stats: BuildStats } {
   log('פענוח תגובת Overpass…');
-  let w = parse(osm);
+  return buildGraphFromWork(parse(osm), opts, log);
+}
+
+/** Shared pipeline (simplify/consolidate/largest-component/segmentize) for any source already parsed into a `Work`. */
+export function buildGraphFromWork(w0: Work, opts: BuildOptions, log: (s: string) => void = () => {}): { graph: Graph; stats: BuildStats } {
+  let w = w0;
   const stats: BuildStats = {
     raw: { n: w.lon.length, m: w.edges.length },
     simplified: { n: 0, m: 0 }, consolidated: { n: 0, m: 0 }, component: { n: 0, m: 0, components: 0 }, final: { n: 0, m: 0 }, totalKm: 0,
