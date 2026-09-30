@@ -29,13 +29,13 @@ export interface Work {
   edges: EdgeInput[];
 }
 
-export function buildGraph(osm: OverpassJson, opts: BuildOptions, log: (s: string) => void = () => {}): { graph: Graph; stats: BuildStats } {
+export function buildGraph(osm: OverpassJson, opts: BuildOptions, log: (s: string) => void = () => { }): { graph: Graph; stats: BuildStats } {
   log('פענוח תגובת Overpass…');
   return buildGraphFromWork(parse(osm), opts, log);
 }
 
 /** Shared pipeline (simplify/consolidate/largest-component/segmentize) for any source already parsed into a `Work`. */
-export function buildGraphFromWork(w0: Work, opts: BuildOptions, log: (s: string) => void = () => {}): { graph: Graph; stats: BuildStats } {
+export function buildGraphFromWork(w0: Work, opts: BuildOptions, log: (s: string) => void = () => { }): { graph: Graph; stats: BuildStats } {
   let w = w0;
   const stats: BuildStats = {
     raw: { n: w.lon.length, m: w.edges.length },
@@ -115,7 +115,7 @@ function simplify(w: Work): Work {
     const geom: number[] = [w.lon[start], w.lat[start]];
     let len = 0;
     let cur = start, e = firstEdge;
-    for (;;) {
+    for (; ;) {
       used[e] = 1;
       const ed = w.edges[e];
       const next = ed.u === cur ? ed.v : ed.u;
